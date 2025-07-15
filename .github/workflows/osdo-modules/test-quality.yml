@@ -1,0 +1,50 @@
+name: 🧪 Testing & Quality Assurance
+on:
+  workflow_call:
+
+jobs:
+  test-quality:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+      security-events: write
+    steps:
+      - uses: ./.github/actions/setup-node-osdo
+        with:
+          node-version: '22'
+
+      - name: Install OSDO testing tools
+        run: |
+          npm install eslint-plugin-security @testing-library/react vitest --save-dev
+          npm install --save-dev eslint-plugin-security @microsoft/eslint-formatter-sarif license-checker
+          npm install --save-dev @testing-library/react @testing-library/jest-dom @testing-library/user-event
+          npm install --save-dev @vitest/ui @vitest/coverage-v8 vitest jsdom @testing-library/dom
+
+      - name: Run Tests
+        run: |
+          chmod +x .osdo/tools/test-runner.sh
+          ./.osdo/tools/test-runner.sh
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: .osdo/results/**
+
+    #   - name: Restore npm cache
+    #     uses: actions/cache@v3
+    #     with:
+    #       path: ~/.npm
+    #       key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+    #       restore-keys: |
+    #         ${{ runner.os }}-npm-
+
+      - name: Install dependencies
+        run: |
+            # Limpiar caché si es necesario
+            npm cache verify
+            # Instalar dependencias
+            npm ci --prefer-offline --no-audit
+
+        continue-on-error: true

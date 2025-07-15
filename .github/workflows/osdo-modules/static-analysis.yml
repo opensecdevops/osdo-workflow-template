@@ -1,0 +1,73 @@
+name: 🛡️ Static Application Security Testing
+on:
+  workflow_call:
+
+jobs:
+    static-analysis:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+      security-events: write
+    needs: dependency-security-scan
+    steps:
+      - uses: ./.github/actions/setup-node-osdo
+        with:
+          node-version: '22'
+      
+      - name: Create results directory
+        run: mkdir -p .osdo/results
+
+      - name: Semgrep Static Analysis
+        run: |
+          RESULTS_DIR="$(pwd)/.osdo/results"
+          mkdir -p "$RESULTS_DIR"
+          docker run --rm \
+            -v "$(pwd):/src" \
+            -v "$RESULTS_DIR:/results" \
+            returntocorp/semgrep:latest \
+            semgrep --sarif --output /results/semgrep.sarif /src
+          if ! [ -s "$RESULTS_DIR/semgrep.sarif" ]; then
+            echo "::error::semgrep.sarif was not created or is empty"
+            exit 1
+          fi
+        continue-on-error: false
+      - name: Validate Semgrep SARIF output
+        run: |
+          if ! jq empty .osdo/results/semgrep.sarif; then
+            echo "::error::semgrep.sarif is invalid JSON"
+            exit 1
+          fi
+        continue-on-error: true
+      - name: Upload Semgrep SARIF file
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: .osdo/results/semgrep.sarif
+        if: always()
+        continue-on-error: true
+      - name: Install ESLint Security Plugin
+        run: npm install eslint @microsoft/eslint-formatter-sarif eslint-plugin-security eslint-plugin-react eslint-plugin-react-hooks eslint-plugin-react-refresh --save-dev
+        
+      - name: Run ESLint with Security Rules
+        env:
+            SARIF_ESLINT_IGNORE_SUPPRESSED: "true"
+        run: |
+          npx eslint . --format json -o .osdo/results/eslint-security-report.json || true
+          npx eslint . --format @microsoft/eslint-formatter-sarif --output-file .osdo/results/eslint-results.sarif || true
+        continue-on-error: true
+
+      - name: Upload ESLint reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: eslint-reports
+          path: |
+            .osdo/results/eslint-security-report.json
+        if: always()
+        
+      - name: Upload analysis results to GitHub
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: .osdo/results/eslint-results.sarif
+          wait-for-processing: true
+        if: always()
+        continue-on-error: true

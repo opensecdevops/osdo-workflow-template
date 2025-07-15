@@ -1,0 +1,74 @@
+name: 🔍 Dependency Security Scan
+on:
+  workflow_call:
+
+jobs:
+    dependency-security-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+      security-events: write
+    needs: test-and-quality
+    steps:
+      - uses: ./.github/actions/setup-node-osdo
+        with:
+          node-version: '22'
+
+      - name: Create results directory
+        run: mkdir -p .osdo/results
+
+      - name: Snyk Vulnerability Analysis
+        run: |
+          docker run --rm \
+            -v "$(pwd):/project" \
+            -v "$(pwd)/.osdo/results:/results" \
+            snyk/snyk:node \
+            test /project \
+            --json > .osdo/results/snyk.json 2>/dev/null || true
+
+      - name: Snyk License Analysis (high severity)
+        run: |
+          docker run --rm \
+            -v "$(pwd):/project" \
+            -v "$(pwd)/.osdo/results:/results" \
+            snyk/snyk:node \
+            test /project \
+            --json \
+            --severity-threshold=high > .osdo/results/snyk-licenses.json 2>/dev/null || true
+
+      - name: Run npm audit
+        run: |
+          npm audit --audit-level=moderate
+          npm audit --json > .osdo/results/npm-audit-report.json
+        continue-on-error: true
+      - name: Run Retire.js
+        run: |
+          npx retire --outputformat json --outputpath .osdo/results/retire-report.json
+        continue-on-error: true
+      - name: Download OWASP Dependency-Check
+        run: |
+          wget https://github.com/jeremylong/DependencyCheck/releases/download/v9.2.0/dependency-check-9.2.0-release.zip
+          unzip dependency-check-9.2.0-release.zip -d dependency-check
+      - name: Run OWASP Dependency-Check
+        run: |
+          ./dependency-check/dependency-check/bin/dependency-check.sh --project "xopsmainpage-react" \
+            --scan . \
+            --format JSON \
+            --out .osdo/results/dependency-check-report.json \
+            --failOnCVSS 7 || true
+      - name: Upload Dependency Reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-reports
+          path: |
+            .osdo/results/snyk.json
+            .osdo/results/snyk-licenses.json
+            .osdo/results/npm-audit-report.json
+            .osdo/results/retire-report.json
+            .osdo/results/dependency-check-report.json
+      # Análisis de licencias
+      - name: License compliance check
+        run: |
+          npx license-checker --onlyAllow 'MIT;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC;CC0-1.0' --excludePrivatePackages
+        continue-on-error: true

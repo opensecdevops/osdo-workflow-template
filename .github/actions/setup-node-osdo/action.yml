@@ -1,0 +1,16 @@
+name: 'Setup Node.js con OSDO'
+description: 'Prepara Node.js y dependencias para pipelines OSDO'
+inputs:
+  node-version:
+    description: 'Versión de Node.js'
+    default: '20'
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: 'npm'
+    - run: npm ci --prefer-offline --no-audit
+      shell: bash

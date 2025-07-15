@@ -1,0 +1,42 @@
+name: 🛡️ OSDO CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop, feature/* ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 2 * * 1' # semanal
+
+concurrency:
+  group: osdo-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-quality:
+    uses: ./.github/workflows/osdo-modules/test-quality.yml
+
+  dependency-scan:
+    uses: ./.github/workflows/osdo-modules/dependency-scan.yml
+    needs: test-quality
+
+  static-analysis:
+    uses: ./.github/workflows/osdo-modules/static-analysis.yml
+    needs: dependency-scan
+
+  secrets-scan:
+    uses: ./.github/workflows/osdo-modules/secrets-scan.yml
+    needs: static-analysis
+
+  secure-build:
+    uses: ./.github/workflows/osdo-modules/secure-build.yml
+    needs: [test-quality, dependency-scan, static-analysis, secrets-scan]
+
+  compliance-report:
+    uses: ./.github/workflows/osdo-modules/compliance-report.yml
+    needs: secure-build
+    if: always()
+
+  security-quality-gate:
+    uses: ./.github/workflows/osdo-modules/security-quality-gate.yml
+    needs: secure-build
