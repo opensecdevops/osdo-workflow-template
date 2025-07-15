@@ -52,26 +52,13 @@ jobs:
 
   static-analysis:
     if: ${{ inputs.run_static_analysis != false }}
-    uses: ./.github/workflows/osdo-modules/static-analysis.yml
+    uses: ./.github/workflows/static-analysis.yml
     needs: dependency-scan
 
   secrets-scan:
     if: ${{ inputs.run_secrets_scan != false }}
-    uses: ./.github/workflows/osdo-modules/secrets-scan.yml
+    uses: ./.github/workflows/secrets-scan.yml
     needs: static-analysis
-
-  # Placeholder para workflows faltantes
-  secure-build:
-    if: ${{ inputs.run_build_security != false }}
-    runs-on: ubuntu-latest
-    needs: [test-quality, dependency-scan, static-analysis, secrets-scan]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Secure Build Placeholder
-        run: |
-          echo "Implementar secure build y SBOM generation"
-          mkdir -p .osdo/results
-          echo '{"build": "secure", "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}' > .osdo/results/build-report.json
 
   compliance-report:
     runs-on: ubuntu-latest
@@ -90,13 +77,3 @@ jobs:
         with:
           name: compliance-report
           path: .osdo/results/compliance-report.md
-
-  security-quality-gate:
-    runs-on: ubuntu-latest
-    needs: secure-build
-    steps:
-      - uses: actions/checkout@v4
-      - name: Security Quality Gate
-        run: |
-          echo "Evaluando quality gate de seguridad..."
-          echo "✅ All security checks passed"
