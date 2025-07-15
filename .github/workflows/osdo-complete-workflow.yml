@@ -43,11 +43,11 @@ concurrency:
 jobs:
   test-quality:
     if: ${{ inputs.run_tests != false }}
-    uses: ./.github/workflows/osdo-modules/test-quality.yml
+    uses: ./.github/workflows/test-quality.yml
 
   dependency-scan:
     if: ${{ inputs.run_security_scan != false }}
-    uses: ./.github/workflows/osdo-modules/dependency-scan.yml
+    uses: ./.github/workflows/dependency-scan.yml
     needs: test-quality
 
   static-analysis:
