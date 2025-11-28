@@ -24,7 +24,9 @@ jobs:
       node-version: '20'
       test-coverage-threshold: '85'
       enable-container-scan: false
-      enable-static-analysis: true
+      enable-sca: true
+      enable-sast: true
+      enable-secrets: true
       report-format: 'markdown'
 ```
 
@@ -54,11 +56,12 @@ jobs:
       python-version: '3.11'
       node-version: 'false'
       test-coverage-threshold: '90'
-      enable-dependency-scan: true
-      enable-secrets-scan: true
-      enable-static-analysis: true
+      enable-sca: true
+      enable-sast: true
+      enable-secrets: true
       enable-build-security: true
       sbom-format: 'both'
+      build-command: 'python -m build'
       enable-quality-gate: true
       critical-threshold: '0'
       high-threshold: '5'
@@ -89,9 +92,9 @@ jobs:
       python-version: '3.11'
       test-coverage-threshold: '80'
       enable-container-scan: true
-      enable-dependency-scan: true
-      enable-secrets-scan: true
-      enable-static-analysis: true
+      enable-sca: true
+      enable-sast: true
+      enable-secrets: true
       enable-build-security: true
       sbom-format: 'both'
       enable-quality-gate: true
@@ -111,14 +114,27 @@ test:
       - 'docs/**'
 
 security:
-  dependency_scan:
+  sca:
     severity_threshold: 'high'
+    tools:
+      node:
+        enabled: true
+      python:
+        enabled: true
+      java:
+        enabled: true
   
-  static_analysis:
+  sast:
     rules:
       - 'security'
       - 'owasp-top-10'
       - 'cwe-top-25'
+  
+  secrets:
+    enabled: true
+    tools:
+      - 'gitleaks'
+      - 'trufflehog'
 
 quality_gates:
   security_score:
@@ -161,4 +177,158 @@ jobs:
           echo "Deploying with OSDO compliance: ${{ needs.osdo-security.outputs.compliance-status }}"
           echo "Security Score: ${{ needs.osdo-security.outputs.security-score }}"
           # Your deployment steps here
+```
+
+## 6. Proyecto Java con Maven
+
+```yaml
+# .github/workflows/java-security.yml
+name: 🛡️ Java Security Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  osdo-java:
+    uses: opensecdevops/osdo-workflow-template/.github/workflows/osdo-framework.yml@main
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+      pull-requests: write
+    with:
+      java-version: '17'
+      node-version: 'false'
+      test-coverage-threshold: '80'
+      enable-sca: true
+      enable-sast: true
+      enable-secrets: true
+      enable-build-security: true
+      sbom-format: 'both'
+      build-command: 'mvn clean install'
+      enable-quality-gate: true
+      critical-threshold: '0'
+      high-threshold: '3'
+      report-format: 'markdown'
+```
+
+## 7. Proyecto Go
+
+```yaml
+# .github/workflows/go-security.yml
+name: 🔒 Go Security & Compliance
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 3 * * 1'
+
+jobs:
+  osdo-go:
+    uses: opensecdevops/osdo-workflow-template/.github/workflows/osdo-framework.yml@main
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+      pull-requests: write
+    with:
+      go-version: '1.21'
+      node-version: 'false'
+      test-coverage-threshold: '85'
+      enable-sca: true
+      enable-sast: true
+      enable-secrets: true
+      enable-build-security: true
+      sbom-format: 'json'
+      build-command: 'go build ./...'
+      enable-quality-gate: true
+      critical-threshold: '0'
+      high-threshold: '5'
+      secrets-threshold: '0'
+```
+
+## 8. Proyecto PHP con Composer
+
+```yaml
+# .github/workflows/php-security.yml
+name: 🔐 PHP Security Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  osdo-php:
+    uses: opensecdevops/osdo-workflow-template/.github/workflows/osdo-framework.yml@main
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+      pull-requests: write
+    with:
+      php-version: '8.2'
+      node-version: 'false'
+      test-coverage-threshold: '75'
+      enable-sca: true
+      enable-sast: true
+      enable-secrets: true
+      enable-build-security: true
+      sbom-format: 'both'
+      build-command: 'composer install --no-dev --optimize-autoloader'
+      enable-quality-gate: true
+      critical-threshold: '0'
+      high-threshold: '5'
+```
+
+## 9. Proyecto Multi-lenguaje (Microservicios)
+
+```yaml
+# .github/workflows/microservices-security.yml
+name: 🏛️ Microservices Security
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  osdo-microservices:
+    uses: opensecdevops/osdo-workflow-template/.github/workflows/osdo-framework.yml@main
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+      pull-requests: write
+    with:
+      # Habilitar múltiples lenguajes
+      node-version: '20'
+      python-version: '3.11'
+      java-version: '17'
+      go-version: '1.21'
+      
+      # Configuración de seguridad estricta
+      test-coverage-threshold: '80'
+      enable-container-scan: true
+      enable-sca: true
+      enable-sast: true
+      enable-secrets: true
+      enable-build-security: true
+      sbom-format: 'both'
+      
+      # Quality Gate estricto
+      enable-quality-gate: true
+      critical-threshold: '0'
+      high-threshold: '2'
+      secrets-threshold: '0'
+      
+      report-format: 'html'
 ```

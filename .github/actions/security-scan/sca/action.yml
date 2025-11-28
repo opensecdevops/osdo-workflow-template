@@ -1,0 +1,142 @@
+name: 'OSDO SCA Scan'
+description: 'Software Composition Analysis (SCA) for various languages'
+inputs:
+  results-dir:
+    description: 'Directory to store SARIF results'
+    required: true
+  node-version:
+    description: 'Node.js version to use'
+    required: false
+    default: '20'
+  python-version:
+    description: 'Python version to use'
+    required: false
+    default: '3.11'
+  java-version:
+    description: 'Java version to use'
+    required: false
+    default: '17'
+  go-version:
+    description: 'Go version to use'
+    required: false
+    default: '1.21'
+  php-version:
+    description: 'PHP version to use'
+    required: false
+    default: '8.2'
+outputs:
+  sarif-files:
+    description: 'Generated SARIF files for SCA'
+    value: ${{ steps.sca.outputs.sarif-files }}
+runs:
+  using: 'composite'
+  steps:
+    # Cache Node.js global packages
+    - name: Cache npm global packages
+      if: hashFiles('package-lock.json') != ''
+      uses: actions/cache@v4
+      with:
+        path: ~/.npm
+        key: ${{ runner.os }}-npm-global-${{ hashFiles('package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-npm-global-
+    
+    # Cache pip packages
+    - name: Cache pip packages
+      if: hashFiles('requirements.txt') != ''
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/pip
+          ~/.local/bin
+        key: ${{ runner.os }}-pip-sca-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-sca-
+    
+    # Cache Maven dependencies and plugins
+    - name: Cache Maven packages
+      if: hashFiles('pom.xml') != ''
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.m2/repository
+          ~/.m2/wrapper
+        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-maven-
+    
+    # Cache OWASP Dependency-Check data
+    - name: Cache Dependency-Check data
+      if: hashFiles('pom.xml') != ''
+      uses: actions/cache@v4
+      with:
+        path: ~/.m2/dependency-check-data
+        key: ${{ runner.os }}-dependency-check-${{ github.run_id }}
+        restore-keys: |
+          ${{ runner.os }}-dependency-check-
+    
+    # Cache Go modules
+    - name: Cache Go modules
+      if: hashFiles('go.mod') != ''
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/go/pkg/mod
+          ~/go/bin
+        key: ${{ runner.os }}-go-${{ hashFiles('go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+    
+    # Cache Composer packages
+    - name: Cache Composer packages
+      if: hashFiles('composer.lock') != ''
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.composer/cache
+          vendor
+        key: ${{ runner.os }}-composer-${{ hashFiles('composer.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-composer-
+    
+    - name: Run SCA scans
+      id: sca
+      shell: bash
+      run: |
+        sarif_files=""
+        # Node.js SCA
+        if [ -f "package-lock.json" ]; then
+          echo "--- Running SCA for Node.js ---"
+          npm install -g audit-ci sarif-formatter
+          audit-ci --config .osdo/audit-ci.json --output-format sarif | sarif-formatter > ${{ inputs.results-dir }}/npm-audit.sarif || true
+          sarif_files="${{ inputs.results-dir }}/npm-audit.sarif"
+        fi
+        # Python SCA
+        if [ -f "requirements.txt" ]; then
+          echo "--- Running SCA for Python ---"
+          pip install safety
+          safety check -r requirements.txt --json > ${{ inputs.results-dir }}/safety-report.json || true
+          # Converter needed for SARIF
+        fi
+        # Java SCA (Maven)
+        if [ -f "pom.xml" ]; then
+          echo "--- Running SCA for Java (Maven) ---"
+          mvn org.owasp:dependency-check-maven:check -Dformat=SARIF -DoutputDirectory=${{ inputs.results-dir }} || true
+          sarif_files="$sarif_files,${{ inputs.results-dir }}/dependency-check-report.sarif"
+        fi
+        # Go SCA
+        if [ -f "go.mod" ]; then
+          echo "--- Running SCA for Go ---"
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck -format json ./... > ${{ inputs.results-dir }}/govulncheck-report.json || true
+          # Converter needed for SARIF
+        fi
+        # PHP SCA
+        if [ -f "composer.lock" ]; then
+          echo "--- Running SCA for PHP ---"
+          # Assumes composer is installed
+          composer global require enlightened/local-php-security-checker
+          local-php-security-checker --path=composer.lock --format=json > ${{ inputs.results-dir }}/php-security-report.json || true
+          # Converter needed for SARIF
+        fi
+        echo "sarif-files=${sarif_files#,}" >> $GITHUB_OUTPUT

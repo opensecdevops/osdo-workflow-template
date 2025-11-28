@@ -1,4 +1,4 @@
-name: 🛡️ OSDO CI/CD Pipeline
+name: OSDO CI/CD Pipeline
 
 on:
   workflow_dispatch:
@@ -52,7 +52,7 @@ concurrency:
 
 jobs:
   osdo-pipeline:
-    name: 🛡️ OSDO Security & Compliance Pipeline
+    name: OSDO Security & Compliance Pipeline
     uses: ./.github/workflows/osdo-framework.yml
     permissions:
       contents: read
@@ -79,9 +79,9 @@ jobs:
       enable-e2e-tests: false
       
       # Security Configuration
-      enable-dependency-scan: ${{ inputs.run_security_scan != false }}
-      enable-secrets-scan: ${{ inputs.run_secrets_scan != false }}
-      enable-static-analysis: ${{ inputs.run_static_analysis != false }}
+      enable-sca: ${{ inputs.run_security_scan != false }}
+      enable-sast: ${{ inputs.run_static_analysis != false }}
+      enable-secrets: ${{ inputs.run_secrets_scan != false }}
       enable-container-scan: ${{ inputs.run_build_security != false }}
       
       # Build Security Configuration
@@ -100,7 +100,7 @@ jobs:
 
   # Job adicional para procesar resultados específicos del proyecto
   post-processing:
-    name: 📊 Post-Processing
+    name: Post-Processing
     runs-on: ubuntu-latest
     needs: osdo-pipeline
     if: always()
@@ -109,10 +109,9 @@ jobs:
       
       - name: Display OSDO Results Summary
         run: |
-          echo "🛡️ OSDO Pipeline Completed"
+          echo "OSDO Pipeline Completed"
           echo "================================"
           echo "Compliance Status: ${{ needs.osdo-pipeline.outputs.compliance-status }}"
-          echo "Security Score: ${{ needs.osdo-pipeline.outputs.security-score }}/100"
           echo "Test Coverage: ${{ needs.osdo-pipeline.outputs.test-coverage }}%"
           echo "Vulnerabilities Found: ${{ needs.osdo-pipeline.outputs.vulnerabilities-found }}"
           echo "Quality Gate Status: ${{ needs.osdo-pipeline.outputs.quality-gate-status }}"

@@ -19,9 +19,14 @@
 │   ├── osdo-framework.yml          # Workflow principal reutilizable
 │   └── osdo-complete-workflow.yml  # Ejemplo de implementación
 └── actions/
-    ├── setup-osdo/                 # Setup del entorno OSDO
+    ├── setup-osdo/                 # Setup del entorno OSDO (Node, Python, Java, Go, PHP)
     ├── test-quality/               # Tests y quality checks
-    ├── security-scan/              # Análisis de seguridad integral
+    ├── security-scan/              # Orquestador de análisis de seguridad
+    │   ├── sast/                   # Static Application Security Testing
+    │   ├── sca/                    # Software Composition Analysis
+    │   └── secrets/                # Detección de secretos
+    ├── build-security/             # Build seguro y generación de SBOM
+    ├── security-quality-gate/      # Evaluación de umbrales de seguridad
     └── compliance-report/          # Generación de reportes
 ```
 
@@ -68,10 +73,21 @@ jobs:
       fail-on-high-security: true
       
       # Security Scans
-      enable-dependency-scan: true
-      enable-secrets-scan: true
-      enable-static-analysis: true
+      enable-sca: true
+      enable-sast: true
+      enable-secrets: true
       enable-container-scan: false
+      
+      # Build Security
+      enable-build-security: true
+      sbom-format: 'both'
+      build-command: 'npm run build'
+
+      # Quality Gate
+      enable-quality-gate: true
+      critical-threshold: '0'
+      high-threshold: '5'
+      secrets-threshold: '0'
 ```
 
 ## 📋 Configuración Avanzada
@@ -102,13 +118,23 @@ reporting:
 |-------|-------------|---------|------|
 | `node-version` | Versión de Node.js | `'22'` | string |
 | `python-version` | Versión de Python | `'3.11'` | string |
+| `java-version` | Versión de Java | `'17'` | string |
+| `go-version` | Versión de Go | `'1.21'` | string |
+| `php-version` | Versión de PHP | `'8.2'` | string |
 | `test-coverage-threshold` | Umbral mínimo de cobertura | `'80'` | string |
-| `enable-dependency-scan` | Habilitar escaneo de dependencias | `true` | boolean |
-| `enable-secrets-scan` | Habilitar detección de secretos | `true` | boolean |
-| `enable-static-analysis` | Habilitar análisis estático | `true` | boolean |
+| `enable-sca` | Habilitar Software Composition Analysis | `true` | boolean |
+| `enable-sast` | Habilitar Static Application Security Testing | `true` | boolean |
+| `enable-secrets` | Habilitar detección de secretos | `true` | boolean |
 | `enable-container-scan` | Habilitar escaneo de contenedores | `false` | boolean |
 | `fail-on-high-security` | Fallar en vulnerabilidades críticas | `true` | boolean |
 | `report-format` | Formato del reporte | `'markdown'` | string |
+| `enable-build-security` | Habilitar build seguro y generación de SBOM | `true` | boolean |
+| `sbom-format` | Formato del SBOM (`json`/`xml`/`both`) | `'both'` | string |
+| `build-command` | Comando para construir la aplicación | `'npm run build'` | string |
+| `enable-quality-gate` | Habilitar Security Quality Gate | `true` | boolean |
+| `critical-threshold` | Máximo permitido de vulnerabilidades críticas | `'0'` | string |
+| `high-threshold` | Máximo permitido de vulnerabilidades altas | `'5'` | string |
+| `secrets-threshold` | Máximo permitido de secretos detectados | `'0'` | string |
 
 ### Outputs Disponibles
 
@@ -118,26 +144,49 @@ reporting:
 | `security-score` | Puntuación de seguridad (0-100) |
 | `test-coverage` | Porcentaje de cobertura de tests |
 | `vulnerabilities-found` | Número total de vulnerabilidades encontradas |
+| `quality-gate-status` | Estado del Quality Gate: `PASSED`, `WARNING`, `FAILED` |
+| `build-verification` | Estado de verificación del build: `VERIFIED`, `WARNING`, `SKIPPED` |
 
 ## 🔍 Herramientas de Seguridad Incluidas
 
-### Análisis de Dependencias
-- **NPM Audit** - Vulnerabilidades en paquetes npm
+### Software Composition Analysis (SCA)
+- **NPM Audit + audit-ci** - Vulnerabilidades en paquetes Node.js
 - **Safety** - Vulnerabilidades en paquetes Python
-- **Snyk** - Análisis avanzado de dependencias
+- **OWASP Dependency-Check** - Análisis de dependencias Java (Maven/Gradle)
+- **Govulncheck** - Herramienta oficial de Go para análisis de vulnerabilidades
+- **Local PHP Security Checker** - Análisis de dependencias PHP (Composer)
 
 ### Detección de Secretos
-- **TruffleHog** - Detección de secretos en código e historial
-- **GitLeaks** - Detección de credenciales filtradas
+- **TruffleHog** - Detección de secretos en código e historial de Git
+- **Gitleaks** - Detección de credenciales filtradas y secretos expuestos
 
-### Análisis Estático (SAST)
-- **Semgrep** - Análisis de seguridad multi-lenguaje
-- **ESLint Security** - Reglas de seguridad para JavaScript/TypeScript
-- **Bandit** - Análisis de seguridad para Python
+### Static Application Security Testing (SAST)
+- **Semgrep** - Análisis de seguridad multi-lenguaje (JS, TS, Python, Java, Go, PHP)
+- **Bandit** - Análisis de seguridad específico para Python
+- **Gosec** - Análisis de seguridad para código Go
+- **SpotBugs + Find-Sec-Bugs** - Análisis de seguridad para Java
+- **PHPStan** - Análisis estático para PHP con enfoque en seguridad
 
 ### Análisis de Contenedores
-- **Trivy** - Escaneo de vulnerabilidades en imágenes
+- **Trivy** - Escaneo de vulnerabilidades en imágenes Docker
 - **Hadolint** - Linting de Dockerfiles
+
+## ⚡ Optimización de Performance
+
+El framework implementa un **sistema de caché inteligente** que reduce significativamente los tiempos de ejecución:
+
+### 📈 Mejora de Performance
+- **70-75% reducción** en tiempos de ejecución de escáneres
+- **5-8 minutos ahorrados** por ejecución completa del pipeline
+- **Caché automático** para todas las herramientas de seguridad
+
+### 🗂️ Cachés Implementados
+- **SCA**: npm, pip, Maven, OWASP Dependency-Check DB, Go modules, Composer
+- **SAST**: Semgrep rules, Go tools, Maven plugins, PHPStan incremental
+- **Secrets**: Docker images para Gitleaks y TruffleHog
+- **Builds**: Artefactos y dependencias de compilación
+
+Ver documentación completa en [`docs/cache-optimization.md`](docs/cache-optimization.md)
 
 ## 📊 Reportes Generados
 
@@ -145,6 +194,8 @@ reporting:
 - **SARIF Files**: Archivos compatibles con GitHub Security tab
 - **Test Coverage**: Reportes de cobertura de código
 - **Security Scan Results**: Resultados detallados de análisis de seguridad
+- **Build Security**: Manifiesto y verificación de integridad del build
+- **SBOM**: Archivos `sbom.json` y `sbom.xml` (CycloneDX)
 
 ## 🔄 Pipeline Flow
 
@@ -152,13 +203,15 @@ reporting:
 graph TD
     A[Setup OSDO Environment] --> B[Test & Quality Gate]
     B --> C[Security Scanning]
-    C --> D[Compliance Report]
+    C --> D[Build Security & SBOM]
     D --> E[Security Quality Gate]
+    E --> F[Compliance Report]
+    F --> G[Final Security Gate]
     
-    B --> F[Upload Test Results]
-    C --> G[Upload SARIF to Security Tab]
-    D --> H[Comment on PR]
-    E --> I[Deploy Gate Decision]
+    B --> H[Upload Test Results]
+    C --> I[Upload SARIF to Security Tab]
+    F --> J[Comment on PR]
+    G --> K[Deploy Gate Decision]
 ```
 
 ## 🛠️ Desarrollo y Personalización
@@ -202,12 +255,50 @@ with:
   enable-static-analysis: true
 ```
 
+### Para Proyecto Java (Maven)
+```yaml
+uses: opensecdevops/osdo-workflow-template/.github/workflows/osdo-framework.yml@main
+with:
+  java-version: '17'
+  node-version: 'false'
+  build-command: 'mvn clean install'
+  enable-sca: true
+  enable-sast: true
+  test-coverage-threshold: '80'
+```
+
+### Para Proyecto Go
+```yaml
+uses: opensecdevops/osdo-workflow-template/.github/workflows/osdo-framework.yml@main
+with:
+  go-version: '1.21'
+  node-version: 'false'
+  build-command: 'go build ./...'
+  enable-sca: true
+  enable-sast: true
+  enable-secrets: true
+```
+
+### Para Proyecto PHP (Composer)
+```yaml
+uses: opensecdevops/osdo-workflow-template/.github/workflows/osdo-framework.yml@main
+with:
+  php-version: '8.2'
+  node-version: 'false'
+  build-command: 'composer install --no-dev --optimize-autoloader'
+  enable-sca: true
+  enable-sast: true
+```
+
 ### Para Proyecto con Docker
 ```yaml
 uses: opensecdevops/osdo-workflow-template/.github/workflows/osdo-framework.yml@main
 with:
   enable-container-scan: true
-  enable-dependency-scan: true
+  enable-sca: true
+  enable-build-security: true
+  sbom-format: 'both'
+  enable-quality-gate: true
 ```
 
 ## 🤝 Contribución
@@ -226,9 +317,9 @@ Este proyecto está licenciado bajo la [MIT License](LICENSE).
 
 Para soporte y preguntas:
 - Abre un [Issue](https://github.com/opensecdevops/osdo-workflow-template/issues)
-- Consulta la [Documentación](https://github.com/opensecdevops/osdo-workflow-template/wiki)
+- Consulta la [Documentación](https://opensecdevops.com)
 - Contacta al equipo de Security DevOps
 
 ---
 
-**OSDO Framework** - Haciendo la seguridad accesible y estandarizada para todos los proyectos de la organización. 🛡️
+**OSDO Framework** - Haciendo la seguridad accesible y estandarizada para todos

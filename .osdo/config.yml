@@ -15,27 +15,65 @@ test:
 
 # Security Scan Configuration
 security:
-  dependency_scan:
+  # Software Composition Analysis (SCA)
+  sca:
     enabled: true
     exclude_dev: false
     severity_threshold: 'moderate'
+    tools:
+      node:
+        enabled: true
+        tool: 'audit-ci'
+      python:
+        enabled: true
+        tool: 'safety'
+      java:
+        enabled: true
+        tool: 'dependency-check'
+      go:
+        enabled: true
+        tool: 'govulncheck'
+      php:
+        enabled: true
+        tool: 'local-php-security-checker'
   
-  secrets_scan:
-    enabled: true
-    exclude_paths:
-      - '.git/**'
-      - 'node_modules/**'
-      - '**/*.log'
-  
-  static_analysis:
+  # Static Application Security Testing (SAST)
+  sast:
     enabled: true
     languages:
       - javascript
       - typescript
       - python
-    rules:
-      - 'security'
-      - 'owasp-top-10'
+      - java
+      - go
+      - php
+    tools:
+      semgrep:
+        enabled: true
+        config: 'auto'
+      bandit:
+        enabled: true
+        language: 'python'
+      gosec:
+        enabled: true
+        language: 'go'
+      spotbugs:
+        enabled: true
+        language: 'java'
+      phpstan:
+        enabled: true
+        language: 'php'
+  
+  # Secrets Detection
+  secrets:
+    enabled: true
+    tools:
+      - 'gitleaks'
+      - 'trufflehog'
+    exclude_paths:
+      - '.git/**'
+      - 'node_modules/**'
+      - '**/*.log'
 
 # Quality Gates
 quality_gates:
@@ -84,6 +122,36 @@ tools:
       - 'p/security-audit'
       - 'p/javascript'
       - 'p/typescript'
+      - 'p/java'
+      - 'p/go'
+      - 'p/php'
+  
+  bandit:
+    confidence_level: 'medium'
+    severity_level: 'low'
+  
+  gosec:
+    severity: 'low'
+    confidence: 'low'
+    exclude_dirs:
+      - 'vendor'
+      - 'test'
+  
+  spotbugs:
+    effort: 'max'
+    threshold: 'low'
+    include_filter: '.osdo/spotbugs-include.xml'
+  
+  phpstan:
+    level: 'max'
+    configuration: '.osdo/phpstan.neon'
+  
+  dependency-check:
+    fail_on_cvss: 7
+    suppression_file: '.osdo/dependency-check-suppressions.xml'
+  
+  govulncheck:
+    mode: 'source'
   
   eslint:
     plugins:
@@ -91,6 +159,9 @@ tools:
       - 'react-hooks'
     rules:
       security: 'error'
+  
+  gitleaks:
+    config: '.osdo/gitleaks.toml'
   
   trufflehog:
     verified: true
@@ -114,3 +185,6 @@ build_security:
   build_commands:
     node: 'npm run build'
     python: 'python -m build'
+    java: 'mvn clean install'
+    go: 'go build ./...'
+    php: 'composer install --no-dev --optimize-autoloader'
