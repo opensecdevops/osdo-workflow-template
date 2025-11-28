@@ -3,13 +3,12 @@ on:
   workflow_call:
 
 jobs:
-    static-analysis:
+  static-analysis:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       actions: write
       security-events: write
-    needs: dependency-security-scan
     steps:
       - uses: ./.github/actions/setup-node-osdo
         with:

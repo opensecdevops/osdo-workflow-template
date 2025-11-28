@@ -1,0 +1,84 @@
+name: 🛡️ OSDO Security Issue
+description: Reportar problemas relacionados con el framework OSDO
+title: "[OSDO] "
+labels: ["security", "osdo"]
+assignees:
+  - security-team
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Gracias por reportar un problema con el OSDO Framework. Por favor proporciona los detalles necesarios.
+
+  - type: dropdown
+    id: issue-type
+    attributes:
+      label: Tipo de Issue
+      description: ¿Qué tipo de problema estás reportando?
+      options:
+        - Vulnerabilidad de Seguridad
+        - Error en Workflow
+        - Falso Positivo
+        - Mejora de Funcionalidad
+        - Documentación
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severidad
+      description: ¿Cuál es la severidad del problema?
+      options:
+        - Critical
+        - High
+        - Medium
+        - Low
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Descripción del Problema
+      description: Describe detalladamente el problema
+      placeholder: Explica qué está pasando y qué esperabas que pasara
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Pasos para Reproducir
+      description: ¿Cómo se puede reproducir este problema?
+      placeholder: |
+        1. Ejecutar workflow con configuración X
+        2. Ver error en step Y
+        3. etc.
+
+  - type: input
+    id: workflow-run
+    attributes:
+      label: ID del Workflow Run
+      description: Si aplica, proporciona el ID del workflow run donde ocurrió el problema
+      placeholder: "https://github.com/owner/repo/actions/runs/12345"
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuración OSDO
+      description: Proporciona tu configuración de OSDO (inputs del workflow, .osdo/config.yml, etc.)
+      render: yaml
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Checklist
+      options:
+        - label: He verificado que no existe un issue similar
+          required: true
+        - label: He incluido toda la información relevante
+          required: true
+        - label: Este issue no contiene información sensible
+          required: true

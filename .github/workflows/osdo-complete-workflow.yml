@@ -28,6 +28,16 @@ on:
         required: true
         default: true
         type: boolean
+      test_coverage_threshold:
+        description: 'Minimum test coverage percentage'
+        required: false
+        default: '80'
+        type: string
+      node_version:
+        description: 'Node.js version to use'
+        required: false
+        default: '22'
+        type: string
   push:
     branches: [ main, develop, feature/* ]
   pull_request:
@@ -41,39 +51,82 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test-quality:
-    if: ${{ inputs.run_tests != false }}
-    uses: ./.github/workflows/test-quality.yml
+  osdo-pipeline:
+    name: 🛡️ OSDO Security & Compliance Pipeline
+    uses: ./.github/workflows/osdo-framework.yml
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+      pull-requests: write
+    with:
+      # Environment Configuration
+      node-version: ${{ inputs.node_version || '22' }}
+      python-version: '3.11'
+      
+      # Pipeline Control
+      run-tests: ${{ inputs.run_tests != false }}
+      run-security-scan: ${{ inputs.run_security_scan != false }}
+      run-compliance-report: true
+      
+      # Quality Configuration
+      test-coverage-threshold: ${{ inputs.test_coverage_threshold || '80' }}
+      fail-on-high-security: true
+      
+      # Test Configuration
+      enable-unit-tests: ${{ inputs.run_tests != false }}
+      enable-integration-tests: ${{ inputs.run_tests != false }}
+      enable-e2e-tests: false
+      
+      # Security Configuration
+      enable-dependency-scan: ${{ inputs.run_security_scan != false }}
+      enable-secrets-scan: ${{ inputs.run_secrets_scan != false }}
+      enable-static-analysis: ${{ inputs.run_static_analysis != false }}
+      enable-container-scan: ${{ inputs.run_build_security != false }}
+      
+      # Build Security Configuration
+      enable-build-security: ${{ inputs.run_build_security != false }}
+      sbom-format: 'both'
+      build-command: 'npm run build'
+      
+      # Quality Gate Configuration
+      enable-quality-gate: true
+      critical-threshold: '0'
+      high-threshold: '10'
+      secrets-threshold: '0'
+      
+      # Report Configuration
+      report-format: 'markdown'
 
-  dependency-scan:
-    if: ${{ inputs.run_security_scan != false }}
-    uses: ./.github/workflows/dependency-scan.yml
-    needs: test-quality
-
-  static-analysis:
-    if: ${{ inputs.run_static_analysis != false }}
-    uses: ./.github/workflows/static-analysis.yml
-    needs: dependency-scan
-
-  secrets-scan:
-    if: ${{ inputs.run_secrets_scan != false }}
-    uses: ./.github/workflows/secrets-scan.yml
-    needs: static-analysis
-
-  compliance-report:
+  # Job adicional para procesar resultados específicos del proyecto
+  post-processing:
+    name: 📊 Post-Processing
     runs-on: ubuntu-latest
-    needs: secure-build
+    needs: osdo-pipeline
     if: always()
     steps:
       - uses: actions/checkout@v4
-      - name: Generate Compliance Report
+      
+      - name: Display OSDO Results Summary
         run: |
-          echo "Generando reporte de compliance..."
-          mkdir -p .osdo/results
-          echo "# OSDO Compliance Report" > .osdo/results/compliance-report.md
-          echo "Generated at: $(date)" >> .osdo/results/compliance-report.md
-      - name: Upload compliance report
-        uses: actions/upload-artifact@v4
-        with:
-          name: compliance-report
-          path: .osdo/results/compliance-report.md
+          echo "🛡️ OSDO Pipeline Completed"
+          echo "================================"
+          echo "Compliance Status: ${{ needs.osdo-pipeline.outputs.compliance-status }}"
+          echo "Security Score: ${{ needs.osdo-pipeline.outputs.security-score }}/100"
+          echo "Test Coverage: ${{ needs.osdo-pipeline.outputs.test-coverage }}%"
+          echo "Vulnerabilities Found: ${{ needs.osdo-pipeline.outputs.vulnerabilities-found }}"
+          echo "Quality Gate Status: ${{ needs.osdo-pipeline.outputs.quality-gate-status }}"
+          echo "Build Verification: ${{ needs.osdo-pipeline.outputs.build-verification }}"
+          echo "================================"
+          
+          # Set pipeline status based on compliance
+          if [ "${{ needs.osdo-pipeline.outputs.compliance-status }}" = "NON_COMPLIANT" ]; then
+            echo "::error::OSDO Pipeline failed - Non-compliant status"
+            exit 1
+          fi
+
+      - name: Create deployment gate
+        if: github.ref == 'refs/heads/main' && needs.osdo-pipeline.outputs.compliance-status == 'COMPLIANT'
+        run: |
+          echo "✅ OSDO Quality Gate PASSED - Ready for deployment"
+          echo "OSDO_DEPLOYMENT_APPROVED=true" >> $GITHUB_ENV

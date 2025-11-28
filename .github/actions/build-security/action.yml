@@ -1,0 +1,182 @@
+name: 'OSDO Secure Build & SBOM Generation'
+description: 'Generate Software Bill of Materials and perform secure build verification'
+inputs:
+  node-version:
+    description: 'Node.js version to use'
+    required: false
+    default: '22'
+  build-command:
+    description: 'Build command to execute'
+    required: false
+    default: 'npm run build'
+  sbom-format:
+    description: 'SBOM format (json, xml, both)'
+    required: false
+    default: 'both'
+  verify-build:
+    description: 'Verify build integrity'
+    required: false
+    default: 'true'
+  build-dir:
+    description: 'Build output directory'
+    required: false
+    default: 'dist'
+
+outputs:
+  sbom-files:
+    description: 'Generated SBOM files'
+    value: ${{ steps.sbom.outputs.files }}
+  build-size:
+    description: 'Build output size'
+    value: ${{ steps.build.outputs.size }}
+  build-status:
+    description: 'Build verification status'
+    value: ${{ steps.verify.outputs.status }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install dependencies
+      shell: bash
+      run: |
+        if [ -f package.json ]; then
+          npm ci
+        elif [ -f requirements.txt ]; then
+          pip install -r requirements.txt
+        elif [ -f Pipfile ]; then
+          pip install pipenv && pipenv install --dev
+        elif [ -f pyproject.toml ]; then
+          pip install -e .
+        fi
+
+    - name: Generate SBOM (Software Bill of Materials)
+      shell: bash
+      id: sbom
+      run: |
+        sbom_files=""
+        
+        if [ -f package.json ]; then
+          # Generate SBOM for Node.js projects
+          npm install -g @cyclonedx/cyclonedx-npm
+          
+          if [ "${{ inputs.sbom-format }}" = "json" ] || [ "${{ inputs.sbom-format }}" = "both" ]; then
+            cyclonedx-npm --output-file $OSDO_RESULTS_DIR/sbom.json
+            sbom_files="$OSDO_RESULTS_DIR/sbom.json"
+          fi
+          
+          if [ "${{ inputs.sbom-format }}" = "xml" ] || [ "${{ inputs.sbom-format }}" = "both" ]; then
+            cyclonedx-npm --output-format xml --output-file $OSDO_RESULTS_DIR/sbom.xml
+            sbom_files="$sbom_files,$OSDO_RESULTS_DIR/sbom.xml"
+          fi
+          
+        elif [ -f requirements.txt ] || [ -f pyproject.toml ]; then
+          # Generate SBOM for Python projects
+          pip install cyclonedx-bom
+          
+          if [ "${{ inputs.sbom-format }}" = "json" ] || [ "${{ inputs.sbom-format }}" = "both" ]; then
+            cyclonedx-py -o $OSDO_RESULTS_DIR/sbom.json
+            sbom_files="$OSDO_RESULTS_DIR/sbom.json"
+          fi
+          
+          if [ "${{ inputs.sbom-format }}" = "xml" ] || [ "${{ inputs.sbom-format }}" = "both" ]; then
+            cyclonedx-py -o $OSDO_RESULTS_DIR/sbom.xml --format xml
+            sbom_files="$sbom_files,$OSDO_RESULTS_DIR/sbom.xml"
+          fi
+        fi
+        
+        echo "files=${sbom_files#,}" >> $GITHUB_OUTPUT
+
+    - name: Build application
+      shell: bash
+      id: build
+      run: |
+        echo "Executing build command: ${{ inputs.build-command }}"
+        
+        # Execute build command
+        if [ -f package.json ] && npm run | grep -q "build"; then
+          ${{ inputs.build-command }}
+        elif [ -f setup.py ]; then
+          python setup.py build
+        elif [ -f pyproject.toml ]; then
+          pip install build && python -m build
+        else
+          echo "No build configuration found, skipping build step"
+        fi
+        
+        # Calculate build size
+        if [ -d "${{ inputs.build-dir }}" ]; then
+          build_size=$(du -sh "${{ inputs.build-dir }}" | cut -f1)
+        else
+          build_size="N/A"
+        fi
+        
+        echo "size=$build_size" >> $GITHUB_OUTPUT
+
+    - name: Verify build integrity
+      shell: bash
+      id: verify
+      run: |
+        if [ "${{ inputs.verify-build }}" = "true" ]; then
+          echo "Verificando integridad del build..."
+          
+          build_dir="${{ inputs.build-dir }}"
+          if [ -d "$build_dir" ]; then
+            # Count files
+            file_count=$(find "$build_dir" -type f \( -name "*.js" -o -name "*.css" -o -name "*.html" -o -name "*.py" -o -name "*.whl" \) | wc -l)
+            
+            # Check for common files
+            has_main_files=false
+            if [ -f "$build_dir/index.html" ] || [ -f "$build_dir/main.js" ] || [ -f "$build_dir/app.js" ] || find "$build_dir" -name "*.whl" | grep -q .; then
+              has_main_files=true
+            fi
+            
+            # Generate integrity report
+            cat > $OSDO_RESULTS_DIR/build-integrity.json << EOF
+        {
+          "build_directory": "$build_dir",
+          "total_files": $file_count,
+          "build_size": "${{ steps.build.outputs.size }}",
+          "has_main_files": $has_main_files,
+          "verified_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        }
+        EOF
+            
+            if [ "$has_main_files" = "true" ] && [ "$file_count" -gt 0 ]; then
+              echo "status=VERIFIED" >> $GITHUB_OUTPUT
+              echo "✅ Build integrity verified: $file_count files generated"
+            else
+              echo "status=WARNING" >> $GITHUB_OUTPUT
+              echo "⚠️ Build verification warning: Unusual build output"
+            fi
+          else
+            echo "status=SKIPPED" >> $GITHUB_OUTPUT
+            echo "ℹ️ Build directory not found, skipping verification"
+          fi
+        else
+          echo "status=DISABLED" >> $GITHUB_OUTPUT
+          echo "Build verification disabled"
+        fi
+
+    - name: Generate build manifest
+      shell: bash
+      run: |
+        # Create build manifest
+        cat > $OSDO_RESULTS_DIR/build-manifest.json << EOF
+        {
+          "build_info": {
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "git_ref": "${{ github.ref }}",
+            "git_sha": "${{ github.sha }}",
+            "build_command": "${{ inputs.build-command }}",
+            "node_version": "${{ inputs.node-version }}",
+            "build_directory": "${{ inputs.build-dir }}",
+            "build_size": "${{ steps.build.outputs.size }}",
+            "verification_status": "${{ steps.verify.outputs.status }}"
+          },
+          "sbom": {
+            "generated": true,
+            "format": "${{ inputs.sbom-format }}",
+            "files": "${{ steps.sbom.outputs.files }}"
+          }
+        }
+        EOF
