@@ -1,0 +1,221 @@
+name: 'OSDO Security Quality Gate'
+description: 'Evaluate security quality gate based on vulnerability thresholds and compliance metrics'
+inputs:
+  critical-threshold:
+    description: 'Maximum allowed critical vulnerabilities'
+    required: false
+    default: '0'
+  high-threshold:
+    description: 'Maximum allowed high severity vulnerabilities'
+    required: false
+    default: '5'
+  secrets-threshold:
+    description: 'Maximum allowed secrets found'
+    required: false
+    default: '0'
+  fail-on-critical:
+    description: 'Fail pipeline on critical vulnerabilities'
+    required: false
+    default: 'true'
+  fail-on-secrets:
+    description: 'Fail pipeline on secrets found'
+    required: false
+    default: 'false'
+  coverage-threshold:
+    description: 'Minimum required test coverage'
+    required: false
+    default: '80'
+
+outputs:
+  gate-status:
+    description: 'Quality gate status (PASSED, FAILED, WARNING)'
+    value: ${{ steps.evaluate.outputs.status }}
+  critical-vulns:
+    description: 'Number of critical vulnerabilities found'
+    value: ${{ steps.evaluate.outputs.critical-vulns }}
+  high-vulns:
+    description: 'Number of high vulnerabilities found'
+    value: ${{ steps.evaluate.outputs.high-vulns }}
+  secrets-found:
+    description: 'Number of secrets found'
+    value: ${{ steps.evaluate.outputs.secrets-found }}
+  coverage-percentage:
+    description: 'Test coverage percentage'
+    value: ${{ steps.evaluate.outputs.coverage }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Download and analyze artifacts
+      shell: bash
+      run: |
+        echo "Analizando artefactos de seguridad para Quality Gate..."
+        
+        # Create summary directory
+        mkdir -p $OSDO_RESULTS_DIR/quality-gate
+
+    - name: Evaluate Security Quality Gate
+      shell: bash
+      id: evaluate
+      run: |
+        # Initialize counters
+        critical_vulns=0
+        high_vulns=0
+        medium_vulns=0
+        low_vulns=0
+        secrets_found=0
+        coverage=0
+        
+        # Analyze NPM audit results
+        if [ -f "$OSDO_RESULTS_DIR/npm-audit.json" ]; then
+          critical_vulns=$(jq '.metadata.vulnerabilities.critical // 0' "$OSDO_RESULTS_DIR/npm-audit.json" 2>/dev/null || echo "0")
+          high_vulns=$(jq '.metadata.vulnerabilities.high // 0' "$OSDO_RESULTS_DIR/npm-audit.json" 2>/dev/null || echo "0")
+          medium_vulns=$(jq '.metadata.vulnerabilities.moderate // 0' "$OSDO_RESULTS_DIR/npm-audit.json" 2>/dev/null || echo "0")
+          low_vulns=$(jq '.metadata.vulnerabilities.low // 0' "$OSDO_RESULTS_DIR/npm-audit.json" 2>/dev/null || echo "0")
+        fi
+        
+        # Analyze Python safety results
+        if [ -f "$OSDO_RESULTS_DIR/safety-report.json" ]; then
+          safety_vulns=$(jq 'length' "$OSDO_RESULTS_DIR/safety-report.json" 2>/dev/null || echo "0")
+          critical_vulns=$((critical_vulns + safety_vulns))
+        fi
+        
+        # Analyze SARIF files for additional vulnerabilities
+        for sarif_file in $OSDO_RESULTS_DIR/*.sarif; do
+          if [ -f "$sarif_file" ]; then
+            sarif_issues=$(jq '[.runs[].results[] | select(.level == "error" or .level == "warning")] | length' "$sarif_file" 2>/dev/null || echo "0")
+            high_vulns=$((high_vulns + sarif_issues))
+          fi
+        done
+        
+        # Analyze secrets detection results
+        if [ -f "$OSDO_RESULTS_DIR/trufflehog-secrets.json" ]; then
+          secrets_found=$(jq 'length' "$OSDO_RESULTS_DIR/trufflehog-secrets.json" 2>/dev/null || echo "0")
+        fi
+        
+        if [ -f "$OSDO_RESULTS_DIR/gitleaks.sarif" ]; then
+          gitleaks_secrets=$(jq '[.runs[].results[]] | length' "$OSDO_RESULTS_DIR/gitleaks.sarif" 2>/dev/null || echo "0")
+          secrets_found=$((secrets_found + gitleaks_secrets))
+        fi
+        
+        # Analyze test coverage
+        if [ -f "$OSDO_RESULTS_DIR/coverage.json" ]; then
+          coverage=$(jq -r '.totals.percent_covered // 0' "$OSDO_RESULTS_DIR/coverage.json" 2>/dev/null || echo "0")
+        fi
+        
+        # Determine gate status
+        gate_status="PASSED"
+        failure_reasons=()
+        warning_reasons=()
+        
+        # Check critical vulnerabilities
+        if [ "$critical_vulns" -gt "${{ inputs.critical-threshold }}" ]; then
+          if [ "${{ inputs.fail-on-critical }}" = "true" ]; then
+            gate_status="FAILED"
+            failure_reasons+=("Critical vulnerabilities: $critical_vulns (threshold: ${{ inputs.critical-threshold }})")
+          else
+            if [ "$gate_status" != "FAILED" ]; then
+              gate_status="WARNING"
+            fi
+            warning_reasons+=("Critical vulnerabilities: $critical_vulns (threshold: ${{ inputs.critical-threshold }})")
+          fi
+        fi
+        
+        # Check high vulnerabilities
+        if [ "$high_vulns" -gt "${{ inputs.high-threshold }}" ]; then
+          if [ "$gate_status" != "FAILED" ]; then
+            gate_status="WARNING"
+          fi
+          warning_reasons+=("High vulnerabilities: $high_vulns (threshold: ${{ inputs.high-threshold }})")
+        fi
+        
+        # Check secrets
+        if [ "$secrets_found" -gt "${{ inputs.secrets-threshold }}" ]; then
+          if [ "${{ inputs.fail-on-secrets }}" = "true" ]; then
+            gate_status="FAILED"
+            failure_reasons+=("Secrets found: $secrets_found (threshold: ${{ inputs.secrets-threshold }})")
+          else
+            if [ "$gate_status" != "FAILED" ]; then
+              gate_status="WARNING"
+            fi
+            warning_reasons+=("Secrets found: $secrets_found (threshold: ${{ inputs.secrets-threshold }})")
+          fi
+        fi
+        
+        # Check coverage
+        coverage_int=$(echo "$coverage" | cut -d. -f1)
+        if [ "$coverage_int" -lt "${{ inputs.coverage-threshold }}" ]; then
+          if [ "$gate_status" != "FAILED" ]; then
+            gate_status="WARNING"
+          fi
+          warning_reasons+=("Test coverage: ${coverage}% (threshold: ${{ inputs.coverage-threshold }}%)")
+        fi
+        
+        # Generate quality gate report
+        cat > $OSDO_RESULTS_DIR/quality-gate/quality-gate-report.json << EOF
+        {
+          "quality_gate": {
+            "status": "$gate_status",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "thresholds": {
+              "critical_vulnerabilities": ${{ inputs.critical-threshold }},
+              "high_vulnerabilities": ${{ inputs.high-threshold }},
+              "secrets": ${{ inputs.secrets-threshold }},
+              "coverage": ${{ inputs.coverage-threshold }}
+            },
+            "results": {
+              "critical_vulnerabilities": $critical_vulns,
+              "high_vulnerabilities": $high_vulns,
+              "medium_vulnerabilities": $medium_vulns,
+              "low_vulnerabilities": $low_vulns,
+              "secrets_found": $secrets_found,
+              "test_coverage": $coverage
+            },
+            "failure_reasons": $(printf '%s\n' "${failure_reasons[@]}" | jq -R . | jq -s .),
+            "warning_reasons": $(printf '%s\n' "${warning_reasons[@]}" | jq -R . | jq -s .)
+          }
+        }
+        EOF
+        
+        # Set outputs
+        echo "status=$gate_status" >> $GITHUB_OUTPUT
+        echo "critical-vulns=$critical_vulns" >> $GITHUB_OUTPUT
+        echo "high-vulns=$high_vulns" >> $GITHUB_OUTPUT
+        echo "secrets-found=$secrets_found" >> $GITHUB_OUTPUT
+        echo "coverage=$coverage" >> $GITHUB_OUTPUT
+        
+        # Display results
+        echo "🚦 Security Quality Gate Evaluation"
+        echo "=================================="
+        echo "Status: $gate_status"
+        echo "Critical Vulnerabilities: $critical_vulns (threshold: ${{ inputs.critical-threshold }})"
+        echo "High Vulnerabilities: $high_vulns (threshold: ${{ inputs.high-threshold }})"
+        echo "Secrets Found: $secrets_found (threshold: ${{ inputs.secrets-threshold }})"
+        echo "Test Coverage: ${coverage}% (threshold: ${{ inputs.coverage-threshold }}%)"
+        echo "=================================="
+        
+        # Display failure reasons
+        if [ ${#failure_reasons[@]} -gt 0 ]; then
+          echo "❌ Failure Reasons:"
+          for reason in "${failure_reasons[@]}"; do
+            echo "  - $reason"
+          done
+        fi
+        
+        # Display warning reasons
+        if [ ${#warning_reasons[@]} -gt 0 ]; then
+          echo "⚠️ Warning Reasons:"
+          for reason in "${warning_reasons[@]}"; do
+            echo "  - $reason"
+          done
+        fi
+        
+        # Fail if necessary
+        if [ "$gate_status" = "FAILED" ]; then
+          echo "::error::Security Quality Gate FAILED"
+          exit 1
+        elif [ "$gate_status" = "WARNING" ]; then
+          echo "::warning::Security Quality Gate passed with warnings"
+        else
+          echo "::notice::Security Quality Gate PASSED"
+        fi

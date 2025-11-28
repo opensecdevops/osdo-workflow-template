@@ -1,0 +1,65 @@
+name: 'OSDO Security Scan Orchestrator'
+description: 'Orchestrates SAST, SCA, and Secrets scans'
+inputs:
+  results-dir:
+    description: 'Directory for results'
+    required: true
+  enable-sast:
+    description: 'Enable SAST scan'
+    default: 'true'
+  enable-sca:
+    description: 'Enable SCA scan'
+    default: 'true'
+  enable-secrets:
+    description: 'Enable Secrets scan'
+    default: 'true'
+outputs:
+  sarif-files:
+    description: 'All generated SARIF files'
+    value: ${{ steps.summary.outputs.sarif-files }}
+  vulnerabilities-found:
+    description: 'Total vulnerabilities found'
+    value: ${{ steps.summary.outputs.total-vulns }}
+runs:
+  using: 'composite'
+  steps:
+    - name: Run SAST Scan
+      if: inputs.enable-sast == 'true'
+      uses: ./.github/actions/security-scan/sast
+      id: sast_step
+      with:
+        results-dir: ${{ inputs.results-dir }}
+    - name: Run SCA Scan
+      if: inputs.enable-sca == 'true'
+      uses: ./.github/actions/security-scan/sca
+      id: sca_step
+      with:
+        results-dir: ${{ inputs.results-dir }}
+    - name: Run Secrets Scan
+      if: inputs.enable-secrets == 'true'
+      uses: ./.github/actions/security-scan/secrets
+      id: secrets_step
+      with:
+        results-dir: ${{ inputs.results-dir }}
+    - name: Consolidate and Summarize Results
+      id: summary
+      shell: bash
+      run: |
+        all_sarif_files=""
+        total_vulns=0
+        sast_sarif="${{ steps.sast_step.outputs.sarif-files }}"
+        sca_sarif="${{ steps.sca_step.outputs.sarif-files }}"
+        secrets_sarif="${{ steps.secrets_step.outputs.sarif-files }}"
+        
+        all_sarif_files="$sast_sarif,$sca_sarif,$secrets_sarif"
+        
+        # Process each SARIF file
+        for sarif_file in $(echo $all_sarif_files | tr ',' ' '); do
+          if [ -f "$sarif_file" ]; then
+            vulns=$(jq '[.runs[].results[]] | length' "$sarif_file" 2>/dev/null || echo "0")
+            total_vulns=$((total_vulns + vulns))
+          fi
+        done
+        
+        echo "sarif-files=${all_sarif_files#,}" >> $GITHUB_OUTPUT
+        echo "total-vulns=$total_vulns" >> $GITHUB_OUTPUT

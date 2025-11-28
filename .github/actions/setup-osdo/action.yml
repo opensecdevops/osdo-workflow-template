@@ -1,0 +1,84 @@
+name: 'Setup OSDO Environment'
+description: 'Setup base environment for OSDO security compliance pipeline'
+inputs:
+  node-version:
+    description: 'Node.js version to use'
+    required: false
+    default: '22'
+  python-version:
+    description: 'Python version to use'
+    required: false
+    default: '3.11'
+  setup-docker:
+    description: 'Setup Docker environment'
+    required: false
+    default: 'true'
+  results-dir:
+    description: 'Directory to store OSDO results'
+    required: false
+    default: '.osdo/results'
+  java-version:
+    description: 'Java version to use'
+    required: false
+    default: '17'
+  go-version:
+    description: 'Go version to use'
+    required: false
+    default: '1.21'
+  php-version:
+    description: 'PHP version to use'
+    required: false
+    default: '8.2'
+
+outputs:
+  results-dir:
+    description: 'Path to results directory'
+    value: ${{ steps.setup.outputs.results-dir }}
+  cache-key:
+    description: 'Cache key for dependencies'
+    value: ${{ steps.setup.outputs.cache-key }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup Node.js
+      if: inputs.node-version != 'false'
+      uses: actions/setup-node@v4
+      continue-on-error: true
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: 'npm'
+        cache-dependency-path: '**/package-lock.json'
+
+    - name: Setup Python
+      if: inputs.python-version != 'false'
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Setup Docker Buildx
+      if: inputs.setup-docker == 'true'
+      uses: docker/setup-buildx-action@v3
+
+    - name: Create OSDO directories
+      shell: bash
+      run: |
+        mkdir -p ${{ inputs.results-dir }}
+        mkdir -p .osdo/cache
+        mkdir -p .osdo/reports
+        mkdir -p .osdo/artifacts
+
+    - name: Setup environment variables
+      shell: bash
+      id: setup
+      run: |
+        echo "results-dir=${{ inputs.results-dir }}" >> $GITHUB_OUTPUT
+        echo "cache-key=osdo-${{ runner.os }}-${{ github.sha }}" >> $GITHUB_OUTPUT
+        echo "OSDO_RESULTS_DIR=${{ inputs.results-dir }}" >> $GITHUB_ENV
+        echo "OSDO_CACHE_DIR=.osdo/cache" >> $GITHUB_ENV
+        echo "OSDO_REPORTS_DIR=.osdo/reports" >> $GITHUB_ENV

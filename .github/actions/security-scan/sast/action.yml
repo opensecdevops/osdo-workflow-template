@@ -1,0 +1,125 @@
+name: 'OSDO SAST Scan'
+description: 'Static Application Security Testing (SAST) for various languages'
+inputs:
+  results-dir:
+    description: 'Directory to store SARIF results'
+    required: true
+outputs:
+  sarif-files:
+    description: 'Generated SARIF files for SAST'
+    value: ${{ steps.sast.outputs.sarif-files }}
+runs:
+  using: 'composite'
+  steps:
+    # Cache Semgrep rules and data
+    - name: Cache Semgrep
+      uses: actions/cache@v4
+      continue-on-error: true
+      with:
+        path: |
+          ~/.semgrep
+          ~/.cache/semgrep
+        key: ${{ runner.os }}-semgrep-${{ github.run_id }}
+        restore-keys: |
+          ${{ runner.os }}-semgrep-
+    
+    # Cache pip packages for Python SAST tools
+    - name: Cache pip packages for SAST
+      uses: actions/cache@v4
+      continue-on-error: true
+      with:
+        path: |
+          ~/.cache/pip
+          ~/.local/bin
+        key: ${{ runner.os }}-pip-sast-${{ hashFiles('requirements.txt', 'setup.py') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-sast-
+    
+    # Cache Go tools (gosec)
+    - name: Cache Go tools
+      if: hashFiles('go.mod') != ''
+      uses: actions/cache@v4
+      continue-on-error: true
+      with:
+        path: |
+          ~/go/bin
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-tools-${{ hashFiles('go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-tools-
+    
+    # Cache Maven for SpotBugs
+    - name: Cache Maven for SAST
+      if: hashFiles('pom.xml') != ''
+      uses: actions/cache@v4
+      continue-on-error: true
+      with:
+        path: ~/.m2/repository
+        key: ${{ runner.os }}-maven-sast-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-maven-sast-
+    
+    # Cache Composer for PHPStan
+    - name: Cache Composer for SAST
+      if: hashFiles('composer.json') != ''
+      uses: actions/cache@v4
+      continue-on-error: true
+      with:
+        path: |
+          ~/.composer/cache
+          vendor
+        key: ${{ runner.os }}-composer-sast-${{ hashFiles('composer.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-composer-sast-
+    
+    # Cache PHPStan results
+    - name: Cache PHPStan
+      if: hashFiles('composer.json') != ''
+      uses: actions/cache@v4
+      continue-on-error: true
+      with:
+        path: .phpstan_cache
+        key: ${{ runner.os }}-phpstan-${{ hashFiles('composer.lock', '.osdo/phpstan.neon') }}
+        restore-keys: |
+          ${{ runner.os }}-phpstan-
+    
+    - name: Run SAST scans
+      id: sast
+      shell: bash
+      run: |
+        sarif_files=""
+        # Multi-language SAST with Semgrep
+        echo "--- Running SAST with Semgrep ---"
+        pip install semgrep
+        semgrep scan --config auto --sarif -o ${{ inputs.results-dir }}/semgrep.sarif || true
+        sarif_files="${{ inputs.results-dir }}/semgrep.sarif"
+        # Python SAST
+        if [ -n "$(find . -name '*.py' -print -quit)" ]; then
+          echo "--- Running SAST for Python with Bandit ---"
+          pip install bandit
+          bandit -r . -f sarif -o ${{ inputs.results-dir }}/bandit.sarif || true
+          sarif_files="$sarif_files,${{ inputs.results-dir }}/bandit.sarif"
+        fi
+        # Go SAST
+        if [ -f "go.mod" ]; then
+          echo "--- Running SAST for Go with gosec ---"
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          gosec -fmt=sarif -out=${{ inputs.results-dir }}/gosec.sarif ./... || true
+          sarif_files="$sarif_files,${{ inputs.results-dir }}/gosec.sarif"
+        fi
+        # Java SAST
+        if [ -f "pom.xml" ]; then
+          echo "--- Running SAST for Java with SpotBugs ---"
+          # Assumes maven is installed and project is built
+          mvn com.github.spotbugs:spotbugs-maven-plugin:spotbugs -Dspotbugs.effort=Max -Dspotbugs.threshold=Low -Dspotbugs.includeFilterFile=.osdo/spotbugs-include.xml -Dspotbugs.sarif.output=${{ inputs.results-dir }}/spotbugs.sarif || true
+          sarif_files="$sarif_files,${{ inputs.results-dir }}/spotbugs.sarif"
+        fi
+        # PHP SAST
+        if [ -f "composer.json" ]; then
+          echo "--- Running SAST for PHP with PHPStan ---"
+          # Assumes composer is installed
+          composer require --dev phpstan/phpstan phpstan/phpstan-deprecation-rules phpstan/phpstan-strict-rules
+          vendor/bin/phpstan analyse -c .osdo/phpstan.neon --error-format=sarif > ${{ inputs.results-dir }}/phpstan.sarif || true
+          sarif_files="$sarif_files,${{ inputs.results-dir }}/phpstan.sarif"
+        fi
+        echo "sarif-files=${sarif_files#,}" >> $GITHUB_OUTPUT
