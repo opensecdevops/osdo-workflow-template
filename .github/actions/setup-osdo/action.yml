@@ -17,6 +17,18 @@ inputs:
     description: 'Directory to store OSDO results'
     required: false
     default: '.osdo/results'
+  java-version:
+    description: 'Java version to use'
+    required: false
+    default: '17'
+  go-version:
+    description: 'Go version to use'
+    required: false
+    default: '1.21'
+  php-version:
+    description: 'PHP version to use'
+    required: false
+    default: '8.2'
 
 outputs:
   results-dir:
