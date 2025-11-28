@@ -276,7 +276,6 @@ jobs:
         id: build
         uses: ./.github/actions/build-security
         with:
-          results-dir: ${{ needs.setup.outputs.results-dir }}
           sbom-format: ${{ inputs.sbom-format }}
           build-command: ${{ inputs.build-command }}
 
@@ -296,7 +295,6 @@ jobs:
         id: gate
         uses: ./.github/actions/security-quality-gate
         with:
-          artifacts-path: 'artifacts'
           coverage-threshold: ${{ inputs.test-coverage-threshold }}
           critical-threshold: ${{ inputs.critical-threshold }}
           high-threshold: ${{ inputs.high-threshold }}
