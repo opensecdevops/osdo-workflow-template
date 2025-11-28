@@ -192,6 +192,7 @@ jobs:
         with:
           name: osdo-results
           path: ${{ steps.osdo-setup.outputs.results-dir }}
+          if-no-files-found: warn
 
   test-quality:
     name: 'Test & Quality Gate'
