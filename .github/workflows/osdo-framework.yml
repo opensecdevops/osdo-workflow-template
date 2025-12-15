@@ -179,7 +179,7 @@ jobs:
           fetch-depth: 0
       - name: Setup OSDO Environment
         id: osdo-setup
-        uses: ./.github/actions/setup-osdo
+        uses: opensecdevops/osdo-workflow-template/.github/actions/setup-osdo@setup-osdo/v1.0.0
         with:
           node-version: ${{ inputs.node-version }}
           python-version: ${{ inputs.python-version }}
@@ -214,7 +214,7 @@ jobs:
           path: ${{ needs.setup.outputs.results-dir }}
       - name: Execute Quality Gate
         id: quality-gate
-        uses: ./.github/actions/test-quality
+        uses: opensecdevops/osdo-workflow-template/.github/actions/test-quality@test-quality/v1.0.0
         with:
           results-dir: ${{ needs.setup.outputs.results-dir }}
           test-coverage-threshold: ${{ inputs.test-coverage-threshold }}
@@ -251,7 +251,7 @@ jobs:
           path: ${{ needs.setup.outputs.results-dir }}
       - name: Run Security Scans
         id: scan
-        uses: ./.github/actions/security-scan
+        uses: opensecdevops/osdo-workflow-template/.github/actions/security-scan@security-scan/v1.0.0
         with:
           results-dir: ${{ needs.setup.outputs.results-dir }}
           enable-sast: ${{ inputs.enable-sast }}
@@ -283,7 +283,7 @@ jobs:
           path: ${{ needs.setup.outputs.results-dir }}
       - name: Run Build Security
         id: build
-        uses: ./.github/actions/build-security
+        uses: opensecdevops/osdo-workflow-template/.github/actions/build-security@build-security/v1.0.0
         with:
           sbom-format: ${{ inputs.sbom-format }}
           build-command: ${{ inputs.build-command }}
@@ -302,7 +302,7 @@ jobs:
           path: artifacts
       - name: Run Quality Gate
         id: gate
-        uses: ./.github/actions/security-quality-gate
+        uses: opensecdevops/osdo-workflow-template/.github/actions/security-quality-gate@security-quality-gate/v1.0.0
         with:
           coverage-threshold: ${{ inputs.test-coverage-threshold }}
           critical-threshold: ${{ inputs.critical-threshold }}
@@ -324,7 +324,7 @@ jobs:
           path: artifacts
       - name: Generate Compliance Report
         id: report
-        uses: ./.github/actions/compliance-report
+        uses: opensecdevops/osdo-workflow-template/.github/actions/compliance-report@compliance-report/v1.0.0
         with:
           artifacts-path: 'artifacts'
           report-format: ${{ inputs.report-format }}

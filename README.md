@@ -30,14 +30,68 @@
     └── compliance-report/          # Generación de reportes
 ```
 
-## 🔧 Uso en Otros Proyectos
+## � Acciones Versionadas y Públicas
 
-### Opción 1: Usar como Template Repository
+Todas las acciones están **versionadas con Semantic Versioning** y son **públicamente accesibles** desde cualquier repositorio.
+
+### 🚀 Uso en Otros Proyectos
+
+#### Opción 1: Framework Completo (Recomendado)
+
+Usa el workflow reutilizable para un pipeline completo:
+
+```yaml
+jobs:
+  osdo-pipeline:
+    uses: opensecdevops/osdo-workflow-template/.github/workflows/osdo-framework.yml@main
+    with:
+      node-version: '22'
+      python-version: '3.11'
+      test-coverage-threshold: '80'
+      enable-sca: true
+      enable-sast: true
+      enable-secrets: true
+```
+
+#### Opción 2: Acciones Individuales
+
+Usa acciones específicas para control granular:
+
+```yaml
+- uses: opensecdevops/osdo-workflow-template/.github/actions/setup-osdo@setup-osdo/v1.0.0
+- uses: opensecdevops/osdo-workflow-template/.github/actions/security-scan@security-scan/v1.0.0
+- uses: opensecdevops/osdo-workflow-template/.github/actions/test-quality@test-quality/v1.0.0
+```
+
+---
+
+## 📚 Documentación Completa
+
+### 🚀 Inicio Rápido
+- **[QUICK_START.md](docs/QUICK_START.md)** - Guía rápida de 2 minutos para empezar
+- **[RESUMEN_EJECUTIVO.md](docs/RESUMEN_EJECUTIVO.md)** - Qué se implementó y por qué
+- **[IMPLEMENTATION_SUMMARY.txt](IMPLEMENTATION_SUMMARY.txt)** - Resumen visual ASCII
+
+### 📖 Documentación Principal
+- **[USAGE_IN_OTHER_REPOS.md](docs/USAGE_IN_OTHER_REPOS.md)** - Cómo usar acciones en tus proyectos ⭐
+- **[PUBLISHING_GUIDE.md](docs/PUBLISHING_GUIDE.md)** - Cómo publicar nuevas versiones ⭐
+- **[FINAL_SETUP.md](docs/FINAL_SETUP.md)** - Pasos para hacer público el repositorio
+
+### 📚 Referencia
+- **[docs/INDEX.md](docs/INDEX.md)** - Índice completo de documentación
+- **[NEXT_STEPS.md](NEXT_STEPS.md)** - Próximos pasos después de esta implementación
+- **[CHANGELOG.md](CHANGELOG.md)** - Historial de cambios por versión
+
+---
+
+## 🔧 Uso Avanzado
+
+### Opción 3: Usar como Template Repository
 
 1. Usa este repositorio como template para crear nuevos proyectos
 2. Personaliza el workflow `osdo-complete-workflow.yml` según tus necesidades
 
-### Opción 2: Referenciar desde Otro Repositorio
+### Opción 4: Referenciar desde Otro Repositorio (Método Anterior)
 
 Crea un workflow en tu proyecto que use el framework OSDO:
 
@@ -196,6 +250,40 @@ Ver documentación completa en [`docs/cache-optimization.md`](docs/cache-optimiz
 - **Security Scan Results**: Resultados detallados de análisis de seguridad
 - **Build Security**: Manifiesto y verificación de integridad del build
 - **SBOM**: Archivos `sbom.json` y `sbom.xml` (CycloneDX)
+
+## 📌 Referencia Rápida de Acciones
+
+| Acción | Versión | Descripción |
+|--------|---------|-------------|
+| `setup-osdo` | `@setup-osdo/v1.0.0` | Setup de entorno OSDO |
+| `test-quality` | `@test-quality/v1.0.0` | Tests y quality checks |
+| `security-scan` | `@security-scan/v1.0.0` | Análisis de seguridad integral |
+| `build-security` | `@build-security/v1.0.0` | Build seguro y SBOM |
+| `security-quality-gate` | `@security-quality-gate/v1.0.0` | Quality gate de seguridad |
+| `compliance-report` | `@compliance-report/v1.0.0` | Generación de reportes |
+
+---
+
+## 🤖 Publicar Nuevas Versiones
+
+Para publicar una nueva versión de una acción:
+
+1. Ve a **Actions** → **🚀 Publish Release**
+2. Click en **Run workflow**
+3. Selecciona:
+   - Acción a publicar
+   - Versión (ej: 1.1.0)
+   - ¿Breaking change? (si/no)
+4. Click en **Run workflow**
+
+El sistema automáticamente:
+- ✅ Valida la versión
+- ✅ Verifica que la action existe
+- ✅ Crea el tag (`action-name/vX.Y.Z`)
+- ✅ Publica GitHub Release
+- ✅ Genera documentación de release
+
+**Ejemplo**: Nueva feature en security-scan → versión 1.1.0 → disponible en `@security-scan/v1.1.0`
 
 ## 🔄 Pipeline Flow
 

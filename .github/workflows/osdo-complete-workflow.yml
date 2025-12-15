@@ -127,5 +127,5 @@ jobs:
       - name: Create deployment gate
         if: github.ref == 'refs/heads/main' && needs.osdo-pipeline.outputs.compliance-status == 'COMPLIANT'
         run: |
-          echo "✅ OSDO Quality Gate PASSED - Ready for deployment"
+          echo "OSDO Quality Gate PASSED - Ready for deployment"
           echo "OSDO_DEPLOYMENT_APPROVED=true" >> $GITHUB_ENV
