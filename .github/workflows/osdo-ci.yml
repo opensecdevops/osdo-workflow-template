@@ -1,0 +1,108 @@
+name: OSDO Framework CI
+
+on:
+    push:
+        branches: [main, develop]
+    pull_request:
+        branches: [main]
+
+permissions:
+    contents: read
+
+jobs:
+    validate-templates:
+        name: Validate OSDO Templates
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup Go
+              uses: actions/setup-go@v5
+              with:
+                  go-version: "1.22"
+
+            - name: Build CLI
+              working-directory: osdo-infra-cli
+              run: go build -o osdo
+
+            - name: Generate Templates
+              working-directory: osdo-infra-cli
+              run: |
+                  for template in security full release mobile web3 genai; do
+                    echo "Generating $template template..."
+                    ./osdo pipeline generate --template "$template" --platform github > "/tmp/osdo-$template.yml"
+                    echo "✅ $template generated"
+                  done
+
+            - name: Validate YAML Syntax
+              run: |
+                  for file in /tmp/osdo-*.yml; do
+                    echo "Validating $file..."
+                    python3 -c "import yaml; yaml.safe_load(open('$file'))"
+                    echo "✅ Valid YAML: $file"
+                  done
+
+            - name: Verify Security Defaults
+              run: |
+                  for file in /tmp/osdo-*.yml; do
+                    if grep -q "fail-on-severity" "$file"; then
+                      echo "✅ Security config found in $file"
+                    fi
+                  done
+
+    lint:
+        name: Lint & Format
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup Go
+              uses: actions/setup-go@v5
+              with:
+                  go-version: "1.22"
+
+            - name: Check Go formatting
+              working-directory: osdo-infra-cli
+              run: |
+                  if [ -n "$(gofmt -l .)" ]; then
+                    echo "Go files are not formatted. Run 'gofmt -w .'"
+                    gofmt -d .
+                    exit 1
+                  fi
+
+            - name: Run Go vet
+              working-directory: osdo-infra-cli
+              run: go vet ./...
+
+    test:
+        name: Unit Tests
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup Go
+              uses: actions/setup-go@v5
+              with:
+                  go-version: "1.22"
+
+            - name: Run Tests
+              working-directory: osdo-infra-cli
+              run: go test -v -race ./...
+
+    security-scan:
+        name: Security Scan
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Run Trivy
+              uses: aquasecurity/trivy-action@master
+              with:
+                  scan-type: "fs"
+                  scan-ref: "."
+                  severity: "CRITICAL,HIGH"
+                  exit-code: "1"
